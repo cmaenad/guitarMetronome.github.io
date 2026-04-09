@@ -11,7 +11,7 @@
   <div class="feedback-bg idle" id="feedback-bg"></div>
 
   <div id="app">
-    <h1>🎸 Guitar <span>Rhythm</span></h1>
+    <h1>🎸 Guitar <span>Rhythm</span> <button id="help-btn" aria-label="Ayuda">?</button></h1>
 
     <!-- Score -->
     <div class="card">
@@ -70,6 +70,36 @@
 
     <!-- Start -->
     <button id="start-btn" aria-label="Iniciar o detener el juego">▶ Iniciar</button>
+  </div>
+
+  <!-- Help modal -->
+  <div id="help-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Ayuda" hidden>
+    <div class="modal-box">
+      <button id="help-close" class="modal-close" aria-label="Cerrar ayuda">✕</button>
+      <h2>¿Cómo funciona?</h2>
+      <ul class="help-list">
+        <li>
+          <strong>Tempo (BPM)</strong>
+          Velocidad del metrónomo en pulsos por minuto. Más a la derecha = más rápido.
+        </li>
+        <li>
+          <strong>Compás</strong>
+          Cantidad de tiempos por compás. 4/4 es el más común en rock. Las luces se encienden en orden, una por tiempo.
+        </li>
+        <li>
+          <strong>Patrón</strong>
+          Cómo se dividen los tiempos del compás. Por ejemplo "8 corcheas" divide cada tiempo en dos notas.
+        </li>
+        <li>
+          <strong>Sensibilidad</strong>
+          Qué tan fuerte tenés que tocar para que el juego detecte la nota. Subila si hay ruido ambiente o si usás distorsión fuerte. Bajala si tocás suave o acústico.
+        </li>
+        <li>
+          <strong>Cómo jugar</strong>
+          Presioná Iniciar, concedé permiso de micrófono y tocá una nota cada vez que se encienda una luz. Fondo verde = acertaste. Fondo rojo = fallaste y los puntos vuelven a cero.
+        </li>
+      </ul>
+    </div>
   </div>
 
   <script type="module" src="js/main.js"></script>

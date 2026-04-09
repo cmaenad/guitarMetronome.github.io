@@ -20,15 +20,22 @@ export class Metronome {
 
   _scheduleClick(time, isAccent) {
     const ctx = this._getCtx();
+    // Layered click: sine body + triangle attack for punchier sound
     const osc = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
+    osc2.connect(gain);
     gain.connect(ctx.destination);
-    osc.frequency.value = isAccent ? 1000 : 800;
-    gain.gain.setValueAtTime(isAccent ? 0.4 : 0.25, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
-    osc.start(time);
-    osc.stop(time + 0.06);
+    osc.type = 'sine';
+    osc2.type = 'triangle';
+    osc.frequency.value = isAccent ? 1200 : 900;
+    osc2.frequency.value = isAccent ? 600 : 450;
+    const vol = isAccent ? 1.0 : 0.75;
+    gain.gain.setValueAtTime(vol, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
+    osc.start(time);  osc.stop(time + 0.13);
+    osc2.start(time); osc2.stop(time + 0.13);
   }
 
   _scheduler() {
@@ -36,10 +43,11 @@ export class Metronome {
     const secondsPerBeat = 60 / this.bpm;
     while (this._nextBeatTime < ctx.currentTime + this.scheduleAhead) {
       const beat = this._currentBeat;
-      this._scheduleClick(this._nextBeatTime, beat === 0);
-      // fire callback slightly before the beat for UI sync
-      const delay = Math.max(0, (this._nextBeatTime - ctx.currentTime) * 1000);
-      setTimeout(() => this.onBeat && this.onBeat(beat), delay);
+      const beatTime = this._nextBeatTime;
+      this._scheduleClick(beatTime, beat === 0);
+      // Precise delay: schedule UI update to fire exactly when audio plays
+      const delayMs = (beatTime - ctx.currentTime) * 1000;
+      setTimeout(() => this.onBeat && this.onBeat(beat), Math.max(0, delayMs));
       this._currentBeat = (this._currentBeat + 1) % this.beatsPerBar;
       this._nextBeatTime += secondsPerBeat;
     }

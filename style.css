@@ -197,3 +197,87 @@ select {
   .beat-light { width: 44px; height: 44px; }
   .bpm-value { font-size: 2.2rem; }
 }
+
+/* Help button */
+#help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  vertical-align: middle;
+  margin-left: 8px;
+  transition: background 0.15s, color 0.15s;
+}
+#help-btn:hover { background: var(--accent); color: #fff; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-overlay[hidden] { display: none; }
+
+.modal-box {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 28px 24px 24px;
+  max-width: 480px;
+  width: 100%;
+  position: relative;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-box h2 {
+  font-size: 1.1rem;
+  color: var(--accent);
+  margin-bottom: 18px;
+}
+
+.modal-close {
+  position: absolute;
+  top: 14px; right: 14px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px;
+}
+.modal-close:hover { color: var(--text); }
+
+.help-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.help-list li {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text);
+  border-left: 3px solid var(--accent2);
+  padding-left: 12px;
+}
+.help-list li strong {
+  display: block;
+  color: var(--accent2);
+  margin-bottom: 2px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}

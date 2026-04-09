@@ -15,6 +15,9 @@ const beatLights     = document.getElementById('beat-lights');
 const feedbackBg     = document.getElementById('feedback-bg');
 const sensitivitySlider = document.getElementById('sensitivity-slider');
 const sensitivityDisplay = document.getElementById('sensitivity-display');
+const helpBtn        = document.getElementById('help-btn');
+const helpModal      = document.getElementById('help-modal');
+const helpClose      = document.getElementById('help-close');
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let activeBeat = -1;
@@ -179,3 +182,8 @@ function restoreState() {
 buildLights(4);
 buildPatternOptions(4);
 restoreState();
+
+// ── Help modal ────────────────────────────────────────────────────────────────
+helpBtn.addEventListener('click', () => { helpModal.hidden = false; });
+helpClose.addEventListener('click', () => { helpModal.hidden = true; });
+helpModal.addEventListener('click', (e) => { if (e.target === helpModal) helpModal.hidden = true; });
