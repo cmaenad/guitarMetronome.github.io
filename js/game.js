@@ -1,34 +1,35 @@
 // Game logic: scoring, beat window, pattern config
+// All times are in AudioContext.currentTime (seconds)
 export class Game {
   constructor({ onScoreChange, onFeedback } = {}) {
     this.onScoreChange = onScoreChange;
     this.onFeedback = onFeedback; // callback('hit'|'miss'|'idle')
     this.score = 0;
     this.streak = 0;
-    this._beatWindowMs = 200; // ±ms around beat to count as hit
-    this._lastBeatTime = null;
+    // Acceptance window: ±seconds around the beat
+    // 0.18s = 180ms each side, generous enough for human reaction
+    this._beatWindowSec = 0.18;
+    this._lastBeatAudioTime = null;
     this._hitThisBeat = false;
     this._feedbackTimer = null;
-    // Pattern: array of subdivisions per beat slot
-    // e.g. [2,2,2,2] = 4 beats each split in 2 (corcheas)
     this.pattern = [1, 1, 1, 1];
   }
 
-  // Called by metronome on each beat
-  onBeat(beatIndex, timeMs) {
-    // Check if previous beat was missed
-    if (this._lastBeatTime !== null && !this._hitThisBeat) {
+  // Called by metronome — beatAudioTime is AudioContext.currentTime of the beat
+  onBeat(beatIndex, beatAudioTime) {
+    // If previous beat was never hit, count as miss
+    if (this._lastBeatAudioTime !== null && !this._hitThisBeat) {
       this._miss();
     }
-    this._lastBeatTime = timeMs ?? performance.now();
+    this._lastBeatAudioTime = beatAudioTime;
     this._hitThisBeat = false;
   }
 
-  // Called by audio input on onset
-  onOnset(timeMs) {
-    if (this._lastBeatTime === null) return;
-    const delta = Math.abs(timeMs - this._lastBeatTime);
-    if (delta <= this._beatWindowMs && !this._hitThisBeat) {
+  // Called by audio input — onsetAudioTime is AudioContext.currentTime of the onset
+  onOnset(onsetAudioTime) {
+    if (this._lastBeatAudioTime === null) return;
+    const delta = Math.abs(onsetAudioTime - this._lastBeatAudioTime);
+    if (delta <= this._beatWindowSec && !this._hitThisBeat) {
       this._hitThisBeat = true;
       this._hit();
     }
@@ -56,14 +57,12 @@ export class Game {
     }, 400);
   }
 
-  setPattern(pattern) {
-    this.pattern = pattern;
-  }
+  setPattern(pattern) { this.pattern = pattern; }
 
   reset() {
     this.score = 0;
     this.streak = 0;
-    this._lastBeatTime = null;
+    this._lastBeatAudioTime = null;
     this._hitThisBeat = false;
     this.onScoreChange && this.onScoreChange(0, 0);
     this.onFeedback && this.onFeedback('idle');

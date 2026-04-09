@@ -36,16 +36,16 @@ const game = new Game({
 const metronome = new Metronome({
   bpm: 80,
   beatsPerBar: 4,
-  onBeat: (beatIndex) => {
+  onBeat: (beatIndex, beatAudioTime) => {
     activeBeat = beatIndex;
     renderLights();
-    game.onBeat(beatIndex, performance.now());
+    game.onBeat(beatIndex, beatAudioTime); // pass AudioContext time
   },
 });
 
 const audioInput = new AudioInput({
-  onOnset: (timeMs) => {
-    game.onOnset(timeMs);
+  onOnset: (onsetAudioTime) => {
+    game.onOnset(onsetAudioTime); // AudioContext time, latency-compensated
   },
 });
 

@@ -3,7 +3,8 @@ export class Metronome {
   constructor({ bpm = 80, beatsPerBar = 4, onBeat } = {}) {
     this.bpm = bpm;
     this.beatsPerBar = beatsPerBar;
-    this.onBeat = onBeat; // callback(beatIndex 0-based)
+    // onBeat(beatIndex, beatAudioTime) — beatAudioTime is AudioContext.currentTime of the beat
+    this.onBeat = onBeat;
     this._ctx = null;
     this._nextBeatTime = 0;
     this._currentBeat = 0;
@@ -20,7 +21,6 @@ export class Metronome {
 
   _scheduleClick(time, isAccent) {
     const ctx = this._getCtx();
-    // Layered click: sine body + triangle attack for punchier sound
     const osc = ctx.createOscillator();
     const osc2 = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -43,11 +43,14 @@ export class Metronome {
     const secondsPerBeat = 60 / this.bpm;
     while (this._nextBeatTime < ctx.currentTime + this.scheduleAhead) {
       const beat = this._currentBeat;
-      const beatTime = this._nextBeatTime;
-      this._scheduleClick(beatTime, beat === 0);
-      // Precise delay: schedule UI update to fire exactly when audio plays
-      const delayMs = (beatTime - ctx.currentTime) * 1000;
-      setTimeout(() => this.onBeat && this.onBeat(beat), Math.max(0, delayMs));
+      const beatAudioTime = this._nextBeatTime; // precise AudioContext timestamp
+      this._scheduleClick(beatAudioTime, beat === 0);
+      // UI callback: fire at the exact moment the audio plays
+      const delayMs = (beatAudioTime - ctx.currentTime) * 1000;
+      setTimeout(
+        () => this.onBeat && this.onBeat(beat, beatAudioTime),
+        Math.max(0, delayMs)
+      );
       this._currentBeat = (this._currentBeat + 1) % this.beatsPerBar;
       this._nextBeatTime += secondsPerBeat;
     }
@@ -69,20 +72,14 @@ export class Metronome {
     clearTimeout(this._timerId);
   }
 
-  setBpm(bpm) {
-    this.bpm = bpm;
-  }
+  setBpm(bpm) { this.bpm = bpm; }
 
   setBeatsPerBar(n) {
     this.beatsPerBar = n;
     this._currentBeat = 0;
   }
 
-  getAudioContext() {
-    return this._getCtx();
-  }
+  getAudioContext() { return this._getCtx(); }
 
-  get isRunning() {
-    return this._running;
-  }
+  get isRunning() { return this._running; }
 }
