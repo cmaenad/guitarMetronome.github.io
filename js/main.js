@@ -42,10 +42,10 @@ const game = new Game({
 const metronome = new Metronome({
   bpm: 80,
   beatsPerBar: 4,
-  onBeat: (beatIndex, beatAudioTime) => {
+  onBeat: (beatIndex, beatAudioTime, beatDuration) => {
     activeBeat = beatIndex;
     renderLights();
-    game.onBeat(beatIndex, beatAudioTime);
+    game.onBeat(beatIndex, beatAudioTime, beatDuration);
   },
 });
 

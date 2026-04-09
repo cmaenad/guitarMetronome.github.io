@@ -4,51 +4,75 @@
  * All times are AudioContext.currentTime (seconds).
  *
  * Beat window:
- *   A hit is valid if the onset falls within [beatTime - earlyWindow, beatTime + lateWindow].
- *   earlyWindow: how early the user can play (anticipation).
- *   lateWindow:  how late the user can play (reaction).
- *   Both default to 180ms, which is generous for human timing.
+ *   Valid hit: onset within [beatTime - earlyFrac, beatTime + lateFrac] of the beat interval.
+ *   Window is proportional to the beat duration so it stays musically meaningful at any BPM.
+ *   Default: ±15% of the beat duration (e.g. 80 BPM → beat = 750ms → window = ±112ms).
  *
- * The latency calibration is handled entirely in AudioInput (onset timestamps
- * are already compensated before reaching here). Game.js never touches latency.
+ *   Miss is triggered immediately when the window expires — not deferred to the next beat.
+ *   This gives instant red feedback when the user plays too late or not at all.
  */
 export class Game {
   constructor({ onScoreChange, onFeedback } = {}) {
     this.onScoreChange = onScoreChange;
     this.onFeedback    = onFeedback;
 
-    this.score   = 0;
-    this.streak  = 0;
+    this.score  = 0;
+    this.streak = 0;
 
-    this._earlyWindowSec  = 0.18; // accept up to 180ms before beat
-    this._lateWindowSec   = 0.18; // accept up to 180ms after beat
+    // Fraction of beat duration accepted as early/late (0.15 = 15%)
+    this.earlyFrac = 0.15;
+    this.lateFrac  = 0.15;
 
-    this._beatTimes       = []; // ring buffer of last 2 beat AudioContext times
-    this._hitThisBeat     = false;
-    this._feedbackTimer   = null;
-    this.pattern          = [1, 1, 1, 1];
+    this._beatTime      = null;  // AudioContext time of current beat
+    this._beatDuration  = null;  // seconds per beat (set by metronome)
+    this._hitThisBeat   = false;
+    this._missTimer     = null;  // fires when the late window expires
+    this._feedbackTimer = null;
+    this.pattern        = [1, 1, 1, 1];
   }
 
-  // Called by metronome — beatAudioTime is the exact AudioContext.currentTime of the beat
-  onBeat(beatIndex, beatAudioTime) {
-    // Check if the previous beat was missed
-    if (this._beatTimes.length > 0 && !this._hitThisBeat) {
+  /**
+   * Called by metronome on every beat.
+   * beatAudioTime — exact AudioContext.currentTime of the beat.
+   * beatDuration  — seconds per beat at current BPM (60 / bpm).
+   */
+  onBeat(beatIndex, beatAudioTime, beatDuration) {
+    // Cancel any pending miss timer from the previous beat
+    clearTimeout(this._missTimer);
+
+    // If previous beat window closed without a hit → miss
+    if (this._beatTime !== null && !this._hitThisBeat) {
       this._miss();
     }
-    this._beatTimes = [beatAudioTime];
-    this._hitThisBeat = false;
+
+    this._beatTime     = beatAudioTime;
+    this._beatDuration = beatDuration;
+    this._hitThisBeat  = false;
+
+    // Schedule a miss if the late window expires with no hit
+    const lateWindowMs = beatDuration * this.lateFrac * 1000;
+    this._missTimer = setTimeout(() => {
+      if (!this._hitThisBeat) this._miss();
+    }, lateWindowMs);
   }
 
-  // Called by AudioInput — onsetAudioTime is already latency-compensated
+  /**
+   * Called by AudioInput — onsetAudioTime is already latency-compensated.
+   */
   onOnset(onsetAudioTime) {
-    if (this._beatTimes.length === 0) return;
-    const beatTime = this._beatTimes[0];
-    const delta    = onsetAudioTime - beatTime;
+    if (this._beatTime === null || this._beatDuration === null) return;
 
-    if (delta >= -this._earlyWindowSec && delta <= this._lateWindowSec && !this._hitThisBeat) {
+    const delta      = onsetAudioTime - this._beatTime;
+    const earlyLimit = -this._beatDuration * this.earlyFrac;
+    const lateLimit  =  this._beatDuration * this.lateFrac;
+
+    if (delta >= earlyLimit && delta <= lateLimit && !this._hitThisBeat) {
+      clearTimeout(this._missTimer); // cancel the pending miss
       this._hitThisBeat = true;
       this._hit();
     }
+    // Onset outside window: ignore (not a miss — user may have played noise)
+    // Miss is only triggered by the timer expiry or the next beat arriving
   }
 
   _hit() {
@@ -70,18 +94,20 @@ export class Game {
     this.onFeedback && this.onFeedback(type);
     this._feedbackTimer = setTimeout(() => {
       this.onFeedback && this.onFeedback('idle');
-    }, 400);
+    }, 350);
   }
 
   setPattern(pattern) { this.pattern = pattern; }
 
   reset() {
-    this.score         = 0;
-    this.streak        = 0;
-    this._beatTimes    = [];
-    this._hitThisBeat  = false;
+    clearTimeout(this._missTimer);
+    clearTimeout(this._feedbackTimer);
+    this.score        = 0;
+    this.streak       = 0;
+    this._beatTime    = null;
+    this._hitThisBeat = false;
     this.onScoreChange && this.onScoreChange(0, 0);
-    this.onFeedback    && this.onFeedback('idle');
+    this.onFeedback   && this.onFeedback('idle');
   }
 
   getState() {
@@ -104,20 +130,20 @@ export const PATTERNS = {
     { label: '4 corcheas', value: [0.5, 0.5, 0.5, 0.5] },
   ],
   3: [
-    { label: '3 negras',        value: [1, 1, 1] },
+    { label: '3 negras',         value: [1, 1, 1] },
     { label: '1 blanca + negra', value: [2, 1] },
-    { label: '6 corcheas',      value: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5] },
+    { label: '6 corcheas',       value: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5] },
   ],
   4: [
-    { label: '4 negras',           value: [1, 1, 1, 1] },
-    { label: '1 redonda',          value: [4] },
-    { label: '2 blancas',          value: [2, 2] },
-    { label: '8 corcheas',         value: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] },
+    { label: '4 negras',            value: [1, 1, 1, 1] },
+    { label: '1 redonda',           value: [4] },
+    { label: '2 blancas',           value: [2, 2] },
+    { label: '8 corcheas',          value: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] },
     { label: '1 blanca + 2 negras', value: [2, 1, 1] },
   ],
   6: [
-    { label: '6 negras',     value: [1, 1, 1, 1, 1, 1] },
+    { label: '6 negras',      value: [1, 1, 1, 1, 1, 1] },
     { label: '2 grupos de 3', value: [3, 3] },
-    { label: '12 corcheas',  value: [0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5] },
+    { label: '12 corcheas',   value: [0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5] },
   ],
 };

@@ -48,7 +48,7 @@ export class Metronome {
       // UI callback: fire at the exact moment the audio plays
       const delayMs = (beatAudioTime - ctx.currentTime) * 1000;
       setTimeout(
-        () => this.onBeat && this.onBeat(beat, beatAudioTime),
+        () => this.onBeat && this.onBeat(beat, beatAudioTime, secondsPerBeat),
         Math.max(0, delayMs)
       );
       this._currentBeat = (this._currentBeat + 1) % this.beatsPerBar;
