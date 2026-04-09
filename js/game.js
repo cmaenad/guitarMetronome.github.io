@@ -1,78 +1,98 @@
 /**
- * Game — scoring logic.
+ * Game — lógica de puntuación.
  *
- * KEY DESIGN: Beat times are registered in advance (from the scheduler, before
- * the beat plays) so the onset detector can always find the nearest beat without
- * waiting for a setTimeout callback. This eliminates all JS-thread jitter from
- * the scoring path.
+ * Todos los tiempos en AudioContext.currentTime (segundos).
  *
- * All times: AudioContext.currentTime (seconds).
+ * Patrón y figuras:
+ *   El patrón es un arreglo de duraciones en tiempos (negra = 1, blanca = 2, etc.).
+ *   El scheduler expande el patrón en slots: cada slot tiene un tiempo de beat
+ *   y un flag `active` que indica si se espera nota en ese slot.
+ *   Ejemplo: patrón [2, 2] en 4/4 → slot 0 activo, slot 1 silencio, slot 2 activo, slot 3 silencio.
  *
- * Window: ±WINDOW_FRAC of the beat duration, centred on the beat.
- * Default 20% → at 80 BPM (750ms/beat) → ±150ms.
- * Tight enough to be musical, wide enough for human reaction.
- *
- * Miss logic: a beat is missed if no onset arrives within its window.
- * Evaluated lazily when the next beat is registered (no extra timers needed —
- * avoids setTimeout drift entirely in the scoring path).
+ * Ventana de detección:
+ *   ±WINDOW_FRAC de la duración del beat, desplazada por `offsetFrac`.
+ *   offsetFrac = -0.5 → ventana antes del beat (anticipación)
+ *   offsetFrac =  0   → centrada en el beat
+ *   offsetFrac = +0.5 → ventana después del beat (reacción tardía)
  */
 
-const WINDOW_FRAC = 0.20; // fraction of beat duration for hit window each side
+const WINDOW_FRAC = 0.20; // ±20% de la duración del beat
 
 export class Game {
   constructor({ onScoreChange, onFeedback } = {}) {
     this.onScoreChange = onScoreChange;
     this.onFeedback    = onFeedback;
 
-    this.score   = 0;
-    this.streak  = 0;
-    this.pattern = [1, 1, 1, 1];
+    this.score      = 0;
+    this.streak     = 0;
+    this.pattern    = [1, 1, 1, 1];
+    this.offsetFrac = 0; // desplazamiento de ventana: -0.5 a +0.5
 
-    // Ring buffer: last two scheduled beats
-    // Each entry: { time: AudioContext seconds, duration: seconds, hit: bool }
-    this._beats        = [];
+    // Slots programados: { time, duration, active, hit }
+    this._slots         = [];
+    this._patternCursor = 0; // índice dentro del patrón expandido
+    this._patternExpanded = []; // patrón expandido a beats individuales
     this._feedbackTimer = null;
   }
 
   /**
-   * Called by the SCHEDULER (not the setTimeout UI callback) for every beat
-   * that is about to be queued. beatTime is the exact AudioContext time.
-   * This runs ahead of the actual beat, so the window is open before the sound plays.
+   * Llamado por el scheduler para cada beat del metrónomo.
+   * Determina si este beat requiere nota según el patrón activo.
    */
   scheduleBeat(beatTime, beatDuration) {
-    // Evaluate miss for the previous beat before replacing it
-    if (this._beats.length > 0) {
-      const prev = this._beats[this._beats.length - 1];
-      if (!prev.hit) this._miss();
+    // Evaluar miss del slot anterior si no fue golpeado
+    if (this._slots.length > 0) {
+      const prev = this._slots[this._slots.length - 1];
+      if (prev.active && !prev.hit) this._miss();
     }
 
-    this._beats.push({ time: beatTime, duration: beatDuration, hit: false });
-    // Keep only last 2 to avoid unbounded growth
-    if (this._beats.length > 2) this._beats.shift();
+    // Expandir patrón si es necesario
+    if (this._patternExpanded.length === 0) this._expandPattern();
+
+    const isActive = this._patternExpanded[this._patternCursor] === 'note';
+    this._patternCursor = (this._patternCursor + 1) % this._patternExpanded.length;
+
+    this._slots.push({ time: beatTime, duration: beatDuration, active: isActive, hit: false });
+    if (this._slots.length > 4) this._slots.shift();
   }
 
   /**
-   * Called by AudioInput — onsetAudioTime is already latency-compensated.
-   * Finds the nearest scheduled beat and checks if the onset is within its window.
+   * Expande el patrón de duraciones a un arreglo de 'note' | 'rest' por beat.
+   * Ejemplo: [2, 1, 1] → ['note','rest','note','note']
+   */
+  _expandPattern() {
+    this._patternExpanded = [];
+    for (const dur of this.pattern) {
+      const beats = Math.round(dur); // duración en tiempos enteros
+      this._patternExpanded.push('note');
+      for (let i = 1; i < beats; i++) this._patternExpanded.push('rest');
+    }
+    this._patternCursor = 0;
+  }
+
+  /**
+   * Llamado por AudioInput — onsetAudioTime ya tiene compensación de latencia.
    */
   onOnset(onsetAudioTime) {
-    if (this._beats.length === 0) return;
+    if (this._slots.length === 0) return;
 
-    // Find the beat whose window contains this onset
-    for (let i = this._beats.length - 1; i >= 0; i--) {
-      const b      = this._beats[i];
-      const half   = b.duration * WINDOW_FRAC;
-      const delta  = onsetAudioTime - b.time;
+    for (let i = this._slots.length - 1; i >= 0; i--) {
+      const s    = this._slots[i];
+      if (!s.active) continue; // slot de silencio — ignorar
+
+      const half   = s.duration * WINDOW_FRAC;
+      const center = s.time + s.duration * this.offsetFrac;
+      const delta  = onsetAudioTime - center;
 
       if (delta >= -half && delta <= half) {
-        if (!b.hit) {
-          b.hit = true;
+        if (!s.hit) {
+          s.hit = true;
           this._hit();
         }
         return;
       }
     }
-    // Onset outside all windows — not a miss, just noise or off-beat
+    // Onset fuera de todas las ventanas — ruido o nota a destiempo, no es miss
   }
 
   _hit() {
@@ -97,27 +117,33 @@ export class Game {
     );
   }
 
-  setPattern(p) { this.pattern = p; }
+  setPattern(p) {
+    this.pattern = p;
+    this._expandPattern();
+    this._patternCursor = 0;
+  }
 
   reset() {
     clearTimeout(this._feedbackTimer);
-    this.score   = 0;
-    this.streak  = 0;
-    this._beats  = [];
+    this.score          = 0;
+    this.streak         = 0;
+    this._slots         = [];
+    this._patternCursor = 0;
     this.onScoreChange && this.onScoreChange(0, 0);
     this.onFeedback    && this.onFeedback('idle');
   }
 
-  getState()      { return { score: this.score, streak: this.streak, pattern: this.pattern }; }
-  loadState(s)    {
+  getState()   { return { score: this.score, streak: this.streak, pattern: this.pattern, offsetFrac: this.offsetFrac }; }
+  loadState(s) {
     if (!s) return;
-    this.score   = s.score   ?? 0;
-    this.streak  = s.streak  ?? 0;
-    this.pattern = s.pattern ?? [1, 1, 1, 1];
+    this.score      = s.score      ?? 0;
+    this.streak     = s.streak     ?? 0;
+    this.offsetFrac = s.offsetFrac ?? 0;
+    if (s.pattern) { this.pattern = s.pattern; this._expandPattern(); }
   }
 }
 
-// ── Available patterns ────────────────────────────────────────────────────────
+// ── Patrones disponibles ──────────────────────────────────────────────────────
 export const PATTERNS = {
   2: [
     { label: '2 negras',   value: [1, 1] },
@@ -125,20 +151,20 @@ export const PATTERNS = {
     { label: '4 corcheas', value: [0.5, 0.5, 0.5, 0.5] },
   ],
   3: [
-    { label: '3 negras',         value: [1, 1, 1] },
-    { label: '1 blanca + negra', value: [2, 1] },
-    { label: '6 corcheas',       value: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5] },
+    { label: '3 negras',          value: [1, 1, 1] },
+    { label: '1 blanca + negra',  value: [2, 1] },
+    { label: '6 corcheas',        value: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5] },
   ],
   4: [
-    { label: '4 negras',            value: [1, 1, 1, 1] },
-    { label: '1 redonda',           value: [4] },
-    { label: '2 blancas',           value: [2, 2] },
-    { label: '8 corcheas',          value: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] },
-    { label: '1 blanca + 2 negras', value: [2, 1, 1] },
+    { label: '4 negras',             value: [1, 1, 1, 1] },
+    { label: '1 redonda',            value: [4] },
+    { label: '2 blancas',            value: [2, 2] },
+    { label: '8 corcheas',           value: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] },
+    { label: '1 blanca + 2 negras',  value: [2, 1, 1] },
   ],
   6: [
-    { label: '6 negras',      value: [1, 1, 1, 1, 1, 1] },
-    { label: '2 grupos de 3', value: [3, 3] },
-    { label: '12 corcheas',   value: [0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5] },
+    { label: '6 negras',       value: [1, 1, 1, 1, 1, 1] },
+    { label: '2 grupos de 3',  value: [3, 3] },
+    { label: '12 corcheas',    value: [0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5] },
   ],
 };

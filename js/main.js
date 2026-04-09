@@ -16,6 +16,8 @@ const beatLights         = document.getElementById('beat-lights');
 const feedbackBg         = document.getElementById('feedback-bg');
 const sensitivitySlider  = document.getElementById('sensitivity-slider');
 const sensitivityDisplay = document.getElementById('sensitivity-display');
+const offsetSlider       = document.getElementById('offset-slider');
+const offsetDisplay      = document.getElementById('offset-display');
 const helpBtn            = document.getElementById('help-btn');
 const helpModal          = document.getElementById('help-modal');
 const helpClose          = document.getElementById('help-close');
@@ -141,6 +143,23 @@ sensitivitySlider.addEventListener('input', () => {
   persist();
 });
 
+// Offset labels: -5..5 → texto descriptivo
+const OFFSET_LABELS = {
+  '-5': 'Muy antes', '-4': 'Antes', '-3': 'Algo antes',
+  '-2': 'Poco antes', '-1': 'Casi antes',
+  '0': 'Centro',
+  '1': 'Casi después', '2': 'Poco después', '3': 'Algo después',
+  '4': 'Después', '5': 'Muy después',
+};
+
+offsetSlider.addEventListener('input', () => {
+  const val = parseInt(offsetSlider.value);
+  offsetDisplay.textContent = OFFSET_LABELS[String(val)] ?? 'Centro';
+  // offsetFrac: map -5..5 → -0.4..0.4
+  game.offsetFrac = val * 0.08;
+  persist();
+});
+
 // ── Start / Stop ──────────────────────────────────────────────────────────────
 startBtn.addEventListener('click', async () => {
   if (metronome.isRunning) {
@@ -152,7 +171,6 @@ startBtn.addEventListener('click', async () => {
 
 async function _startSession() {
   try {
-    // latencyCompSec is frozen inside start() — must be set before calling it
     audioInput.latencyCompSec = calibratedLatencySec !== null ? calibratedLatencySec : 0.0;
     await audioInput.start(metronome.getAudioContext());
     metronome.start();
@@ -182,7 +200,7 @@ latencyBtn.addEventListener('click', async () => {
 
   // Start mic only (no metronome) for calibration
   try {
-    audioInput.latencyCompSec = 0.0; // no compensation during calibration measurement
+    audioInput.latencyCompSec = 0.0;
     await audioInput.start(metronome.getAudioContext());
   } catch (err) {
     alert('Se necesita acceso al micrófono para calibrar: ' + err.message);
@@ -205,7 +223,7 @@ latencyBtn.addEventListener('click', async () => {
 
 // ── Reset to defaults ─────────────────────────────────────────────────────────
 resetBtn.addEventListener('click', () => {
-  if (!confirm('¿Restablecer toda la configuración a los valores por defecto?')) return;
+  if (!confirm('¿Restablecer toda la configuración a los valores predeterminados?')) return;
   if (metronome.isRunning) _stopSession();
 
   clearState();
@@ -224,6 +242,10 @@ resetBtn.addEventListener('click', () => {
   sensitivityDisplay.textContent = DEFAULTS.sensitivity.toFixed(1);
   audioInput.threshold           = DEFAULTS.sensitivity;
 
+  offsetSlider.value        = 0;
+  offsetDisplay.textContent = 'Centro';
+  game.offsetFrac           = 0;
+
   game.reset();
   persist();
 });
@@ -235,6 +257,7 @@ function persist() {
     beats:                parseInt(beatsSelect.value),
     patternIdx:           parseInt(patternSelect.value),
     sensitivity:          parseFloat(sensitivitySlider.value),
+    offsetVal:            parseInt(offsetSlider.value),
     calibratedLatencySec,
     ...game.getState(),
   });
@@ -263,6 +286,11 @@ function restoreState() {
   sensitivitySlider.value        = sens;
   sensitivityDisplay.textContent = parseFloat(sens).toFixed(1);
   audioInput.threshold           = sens;
+
+  const offsetVal = s.offsetVal ?? 0;
+  offsetSlider.value        = offsetVal;
+  offsetDisplay.textContent = OFFSET_LABELS[String(offsetVal)] ?? 'Centro';
+  game.offsetFrac           = offsetVal * 0.08;
 
   if (s.calibratedLatencySec != null) {
     setCalibration(s.calibratedLatencySec);

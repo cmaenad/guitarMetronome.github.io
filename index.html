@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es-MX">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
@@ -13,7 +13,7 @@
   <div id="app">
     <h1>🎸 Guitar <span>Rhythm</span> <button id="help-btn" aria-label="Ayuda">?</button></h1>
 
-    <!-- Score -->
+    <!-- Marcador -->
     <div class="card">
       <div class="score-row">
         <div class="score-block">
@@ -27,16 +27,16 @@
       </div>
     </div>
 
-    <!-- Beat lights -->
+    <!-- Luces del compás -->
     <div class="card">
       <div id="beat-lights"></div>
     </div>
 
-    <!-- Metronome -->
+    <!-- Metrónomo -->
     <div class="card">
       <div class="card-row">
-        <label>Tempo</label>
-        <input type="range" id="bpm-slider" min="40" max="220" value="80" step="1" aria-label="BPM" />
+        <label for="bpm-slider">Tempo</label>
+        <input type="range" id="bpm-slider" min="40" max="220" value="80" step="1" aria-label="Tempo en BPM" />
         <div>
           <span class="bpm-value" id="bpm-display">80</span>
           <span class="bpm-unit">BPM</span>
@@ -44,7 +44,7 @@
       </div>
 
       <div class="card-row">
-        <label>Compás</label>
+        <label for="beats-select">Compás</label>
         <select id="beats-select" aria-label="Tiempos por compás">
           <option value="2">2/4</option>
           <option value="3">3/4</option>
@@ -54,37 +54,47 @@
       </div>
 
       <div class="card-row">
-        <label>Patrón</label>
+        <label for="pattern-select">Patrón</label>
         <select id="pattern-select" aria-label="Patrón rítmico"></select>
       </div>
     </div>
 
-    <!-- Sensitivity -->
+    <!-- Configuración de detección -->
     <div class="card">
       <div class="card-row">
-        <label>Sensibilidad</label>
+        <label for="sensitivity-slider">Sensibilidad</label>
         <input type="range" id="sensitivity-slider" min="1.1" max="4.0" value="1.5" step="0.1" aria-label="Sensibilidad del micrófono" />
         <span class="sens-value" id="sensitivity-display">1.5</span>
       </div>
+
+      <div class="card-row">
+        <label for="offset-slider">Momento</label>
+        <div class="offset-track-wrap">
+          <span class="offset-label-side">Antes</span>
+          <input type="range" id="offset-slider" min="-5" max="5" value="0" step="1" aria-label="Momento de detección" />
+          <span class="offset-label-side">Después</span>
+        </div>
+        <span class="sens-value" id="offset-display">Centro</span>
+      </div>
     </div>
 
-    <!-- Start -->
+    <!-- Iniciar -->
     <button id="start-btn" aria-label="Iniciar o detener el juego">▶ Iniciar</button>
 
-    <!-- Utility buttons -->
+    <!-- Botones de utilidad -->
     <div class="util-row">
       <button id="latency-btn" class="util-btn" aria-label="Calibrar latencia">🎯 Calibrar latencia</button>
-      <button id="reset-btn" class="util-btn util-btn--danger" aria-label="Restablecer configuración por defecto">↺ Defaults</button>
+      <button id="reset-btn" class="util-btn util-btn--danger" aria-label="Restablecer valores predeterminados">↺ Predeterminados</button>
     </div>
 
-    <!-- Latency display -->
+    <!-- Indicador de latencia calibrada -->
     <div class="latency-info" id="latency-info" hidden>
-      <span id="latency-label">Latencia calibrada:</span>
+      <span>Latencia calibrada:</span>
       <span id="latency-value">—</span>
     </div>
   </div>
 
-  <!-- Help modal -->
+  <!-- Modal de ayuda -->
   <div id="help-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Ayuda" hidden>
     <div class="modal-box">
       <button id="help-close" class="modal-close" aria-label="Cerrar ayuda">✕</button>
@@ -100,15 +110,23 @@
         </li>
         <li>
           <strong>Patrón</strong>
-          Cómo se dividen los tiempos del compás. Por ejemplo "8 corcheas" divide cada tiempo en dos notas.
+          Cómo se distribuyen las notas en el compás. Las figuras más largas que una negra (blanca, redonda) generan silencios en los tiempos siguientes — solo se toca en el primer tiempo de cada figura.
         </li>
         <li>
           <strong>Sensibilidad</strong>
-          Qué tan fuerte tenés que tocar para que el juego detecte la nota. Subila si hay ruido ambiente o si usás distorsión fuerte. Bajala si tocás suave o acústico.
+          Qué tan fuerte tienes que tocar para que el juego detecte la nota. Súbela si hay ruido ambiente o usas distorsión fuerte. Bájala si tocas suave o acústico.
+        </li>
+        <li>
+          <strong>Momento</strong>
+          Desplaza la ventana de detección. "Antes" acepta notas anticipadas, "Centro" es justo en el beat, "Después" acepta notas con retraso. Ajústalo según tu forma de tocar.
+        </li>
+        <li>
+          <strong>Calibrar latencia</strong>
+          Mide el retraso entre lo que ves y lo que tocas. Toca la nota cuando la pelota toque el piso. Se hacen 5 mediciones y se promedia el resultado.
         </li>
         <li>
           <strong>Cómo jugar</strong>
-          Presioná Iniciar, concedé permiso de micrófono y tocá una nota cada vez que se encienda una luz. Fondo verde = acertaste. Fondo rojo = fallaste y los puntos vuelven a cero.
+          Presiona Iniciar, permite el acceso al micrófono y toca una nota cada vez que se encienda una luz. Fondo verde = acertaste. Fondo rojo = fallaste y los puntos regresan a cero.
         </li>
       </ul>
     </div>
