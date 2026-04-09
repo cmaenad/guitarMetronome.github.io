@@ -1,0 +1,13 @@
+{
+  "name": "Validate JS on Save",
+  "version": "1.0.0",
+  "description": "Reminds to check for syntax issues when JS files are edited",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["**/*.js", "**/*.html", "**/*.css"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A source file was just saved. Check for any obvious syntax errors or broken module imports in the changed file and fix them if found."
+  }
+}

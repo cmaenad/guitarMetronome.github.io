@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="theme-color" content="#0f0f13" />
+  <title>Guitar Rhythm Game</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="feedback-bg idle" id="feedback-bg"></div>
+
+  <div id="app">
+    <h1>🎸 Guitar <span>Rhythm</span></h1>
+
+    <!-- Score -->
+    <div class="card">
+      <div class="score-row">
+        <div class="score-block">
+          <span class="score-num" id="score">0</span>
+          <span class="score-label">Puntos</span>
+        </div>
+        <div class="score-block">
+          <span class="score-num" id="streak">0</span>
+          <span class="score-label">Racha</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Beat lights -->
+    <div class="card">
+      <div id="beat-lights"></div>
+    </div>
+
+    <!-- Metronome -->
+    <div class="card">
+      <div class="card-row">
+        <label>Tempo</label>
+        <input type="range" id="bpm-slider" min="40" max="220" value="80" step="1" aria-label="BPM" />
+        <div>
+          <span class="bpm-value" id="bpm-display">80</span>
+          <span class="bpm-unit">BPM</span>
+        </div>
+      </div>
+
+      <div class="card-row">
+        <label>Compás</label>
+        <select id="beats-select" aria-label="Tiempos por compás">
+          <option value="2">2/4</option>
+          <option value="3">3/4</option>
+          <option value="4" selected>4/4</option>
+          <option value="6">6/8</option>
+        </select>
+      </div>
+
+      <div class="card-row">
+        <label>Patrón</label>
+        <select id="pattern-select" aria-label="Patrón rítmico"></select>
+      </div>
+    </div>
+
+    <!-- Sensitivity -->
+    <div class="card">
+      <div class="card-row">
+        <label>Sensibilidad</label>
+        <input type="range" id="sensitivity-slider" min="1.1" max="4.0" value="1.5" step="0.1" aria-label="Sensibilidad del micrófono" />
+        <span class="sens-value" id="sensitivity-display">1.5</span>
+      </div>
+    </div>
+
+    <!-- Start -->
+    <button id="start-btn" aria-label="Iniciar o detener el juego">▶ Iniciar</button>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
