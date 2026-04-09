@@ -281,3 +281,84 @@ select {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
+/* Utility buttons row */
+.util-row {
+  display: flex;
+  gap: 10px;
+}
+.util-btn {
+  flex: 1;
+  padding: 12px 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  letter-spacing: 0.02em;
+}
+.util-btn:hover { background: var(--accent); color: #fff; }
+.util-btn--danger { border-color: var(--muted); color: var(--muted); }
+.util-btn--danger:hover { background: var(--muted); color: var(--bg); }
+
+/* Latency info strip */
+.latency-info {
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--muted);
+  padding: 4px 0;
+}
+.latency-info[hidden] { display: none; }
+#latency-value { color: var(--accent2); font-weight: 600; margin-left: 6px; }
+
+/* ── Calibrator modal ─────────────────────────────────────────────────────── */
+.cal-overlay { z-index: 200; }
+
+.cal-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.cal-instructions {
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.cal-instructions strong { color: var(--text); }
+
+#cal-canvas {
+  border-radius: 10px;
+  background: var(--surface2);
+  max-width: 100%;
+  touch-action: none;
+}
+
+.cal-progress {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.cal-dots {
+  display: flex;
+  gap: 8px;
+}
+.cal-dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--surface2);
+  border: 2px solid var(--accent);
+  transition: background 0.2s;
+}
+.cal-dot.done { background: var(--accent); }
+
+.cal-status {
+  font-size: 0.9rem;
+  color: var(--text);
+  min-height: 1.4em;
+}

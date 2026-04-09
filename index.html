@@ -70,6 +70,18 @@
 
     <!-- Start -->
     <button id="start-btn" aria-label="Iniciar o detener el juego">▶ Iniciar</button>
+
+    <!-- Utility buttons -->
+    <div class="util-row">
+      <button id="latency-btn" class="util-btn" aria-label="Calibrar latencia">🎯 Calibrar latencia</button>
+      <button id="reset-btn" class="util-btn util-btn--danger" aria-label="Restablecer configuración por defecto">↺ Defaults</button>
+    </div>
+
+    <!-- Latency display -->
+    <div class="latency-info" id="latency-info" hidden>
+      <span id="latency-label">Latencia calibrada:</span>
+      <span id="latency-value">—</span>
+    </div>
   </div>
 
   <!-- Help modal -->
