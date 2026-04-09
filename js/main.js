@@ -42,10 +42,14 @@ const game = new Game({
 const metronome = new Metronome({
   bpm: 80,
   beatsPerBar: 4,
-  onBeat: (beatIndex, beatAudioTime, beatDuration) => {
+  // Scoring path: called immediately when beat is queued — no setTimeout jitter
+  onSchedule: (beatIndex, beatAudioTime, beatDuration) => {
+    game.scheduleBeat(beatAudioTime, beatDuration);
+  },
+  // UI path: called via setTimeout when audio plays — lights only
+  onBeat: (beatIndex) => {
     activeBeat = beatIndex;
     renderLights();
-    game.onBeat(beatIndex, beatAudioTime, beatDuration);
   },
 });
 

@@ -1,78 +1,78 @@
 /**
  * Game — scoring logic.
  *
- * All times are AudioContext.currentTime (seconds).
+ * KEY DESIGN: Beat times are registered in advance (from the scheduler, before
+ * the beat plays) so the onset detector can always find the nearest beat without
+ * waiting for a setTimeout callback. This eliminates all JS-thread jitter from
+ * the scoring path.
  *
- * Beat window:
- *   Valid hit: onset within [beatTime - earlyFrac, beatTime + lateFrac] of the beat interval.
- *   Window is proportional to the beat duration so it stays musically meaningful at any BPM.
- *   Default: ±15% of the beat duration (e.g. 80 BPM → beat = 750ms → window = ±112ms).
+ * All times: AudioContext.currentTime (seconds).
  *
- *   Miss is triggered immediately when the window expires — not deferred to the next beat.
- *   This gives instant red feedback when the user plays too late or not at all.
+ * Window: ±WINDOW_FRAC of the beat duration, centred on the beat.
+ * Default 20% → at 80 BPM (750ms/beat) → ±150ms.
+ * Tight enough to be musical, wide enough for human reaction.
+ *
+ * Miss logic: a beat is missed if no onset arrives within its window.
+ * Evaluated lazily when the next beat is registered (no extra timers needed —
+ * avoids setTimeout drift entirely in the scoring path).
  */
+
+const WINDOW_FRAC = 0.20; // fraction of beat duration for hit window each side
+
 export class Game {
   constructor({ onScoreChange, onFeedback } = {}) {
     this.onScoreChange = onScoreChange;
     this.onFeedback    = onFeedback;
 
-    this.score  = 0;
-    this.streak = 0;
+    this.score   = 0;
+    this.streak  = 0;
+    this.pattern = [1, 1, 1, 1];
 
-    // Fraction of beat duration accepted as early/late (0.15 = 15%)
-    this.earlyFrac = 0.15;
-    this.lateFrac  = 0.15;
-
-    this._beatTime      = null;  // AudioContext time of current beat
-    this._beatDuration  = null;  // seconds per beat (set by metronome)
-    this._hitThisBeat   = false;
-    this._missTimer     = null;  // fires when the late window expires
+    // Ring buffer: last two scheduled beats
+    // Each entry: { time: AudioContext seconds, duration: seconds, hit: bool }
+    this._beats        = [];
     this._feedbackTimer = null;
-    this.pattern        = [1, 1, 1, 1];
   }
 
   /**
-   * Called by metronome on every beat.
-   * beatAudioTime — exact AudioContext.currentTime of the beat.
-   * beatDuration  — seconds per beat at current BPM (60 / bpm).
+   * Called by the SCHEDULER (not the setTimeout UI callback) for every beat
+   * that is about to be queued. beatTime is the exact AudioContext time.
+   * This runs ahead of the actual beat, so the window is open before the sound plays.
    */
-  onBeat(beatIndex, beatAudioTime, beatDuration) {
-    // Cancel any pending miss timer from the previous beat
-    clearTimeout(this._missTimer);
-
-    // If previous beat window closed without a hit → miss
-    if (this._beatTime !== null && !this._hitThisBeat) {
-      this._miss();
+  scheduleBeat(beatTime, beatDuration) {
+    // Evaluate miss for the previous beat before replacing it
+    if (this._beats.length > 0) {
+      const prev = this._beats[this._beats.length - 1];
+      if (!prev.hit) this._miss();
     }
 
-    this._beatTime     = beatAudioTime;
-    this._beatDuration = beatDuration;
-    this._hitThisBeat  = false;
-
-    // Schedule a miss if the late window expires with no hit
-    const lateWindowMs = beatDuration * this.lateFrac * 1000;
-    this._missTimer = setTimeout(() => {
-      if (!this._hitThisBeat) this._miss();
-    }, lateWindowMs);
+    this._beats.push({ time: beatTime, duration: beatDuration, hit: false });
+    // Keep only last 2 to avoid unbounded growth
+    if (this._beats.length > 2) this._beats.shift();
   }
 
   /**
    * Called by AudioInput — onsetAudioTime is already latency-compensated.
+   * Finds the nearest scheduled beat and checks if the onset is within its window.
    */
   onOnset(onsetAudioTime) {
-    if (this._beatTime === null || this._beatDuration === null) return;
+    if (this._beats.length === 0) return;
 
-    const delta      = onsetAudioTime - this._beatTime;
-    const earlyLimit = -this._beatDuration * this.earlyFrac;
-    const lateLimit  =  this._beatDuration * this.lateFrac;
+    // Find the beat whose window contains this onset
+    for (let i = this._beats.length - 1; i >= 0; i--) {
+      const b      = this._beats[i];
+      const half   = b.duration * WINDOW_FRAC;
+      const delta  = onsetAudioTime - b.time;
 
-    if (delta >= earlyLimit && delta <= lateLimit && !this._hitThisBeat) {
-      clearTimeout(this._missTimer); // cancel the pending miss
-      this._hitThisBeat = true;
-      this._hit();
+      if (delta >= -half && delta <= half) {
+        if (!b.hit) {
+          b.hit = true;
+          this._hit();
+        }
+        return;
+      }
     }
-    // Onset outside window: ignore (not a miss — user may have played noise)
-    // Miss is only triggered by the timer expiry or the next beat arriving
+    // Onset outside all windows — not a miss, just noise or off-beat
   }
 
   _hit() {
@@ -92,33 +92,28 @@ export class Game {
   _feedback(type) {
     clearTimeout(this._feedbackTimer);
     this.onFeedback && this.onFeedback(type);
-    this._feedbackTimer = setTimeout(() => {
-      this.onFeedback && this.onFeedback('idle');
-    }, 350);
+    this._feedbackTimer = setTimeout(
+      () => this.onFeedback && this.onFeedback('idle'), 350
+    );
   }
 
-  setPattern(pattern) { this.pattern = pattern; }
+  setPattern(p) { this.pattern = p; }
 
   reset() {
-    clearTimeout(this._missTimer);
     clearTimeout(this._feedbackTimer);
-    this.score        = 0;
-    this.streak       = 0;
-    this._beatTime    = null;
-    this._hitThisBeat = false;
+    this.score   = 0;
+    this.streak  = 0;
+    this._beats  = [];
     this.onScoreChange && this.onScoreChange(0, 0);
-    this.onFeedback   && this.onFeedback('idle');
+    this.onFeedback    && this.onFeedback('idle');
   }
 
-  getState() {
-    return { score: this.score, streak: this.streak, pattern: this.pattern };
-  }
-
-  loadState(state) {
-    if (!state) return;
-    this.score   = state.score   ?? 0;
-    this.streak  = state.streak  ?? 0;
-    this.pattern = state.pattern ?? [1, 1, 1, 1];
+  getState()      { return { score: this.score, streak: this.streak, pattern: this.pattern }; }
+  loadState(s)    {
+    if (!s) return;
+    this.score   = s.score   ?? 0;
+    this.streak  = s.streak  ?? 0;
+    this.pattern = s.pattern ?? [1, 1, 1, 1];
   }
 }
 
