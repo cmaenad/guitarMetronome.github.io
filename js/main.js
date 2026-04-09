@@ -1,8 +1,8 @@
-import { Metronome } from './metronome.js';
-import { AudioInput } from './audio.js';
-import { Game, PATTERNS } from './game.js';
+import { Metronome }          from './metronome.js';
+import { AudioInput }          from './audio.js';
+import { Game, PATTERNS }      from './game.js';
 import { saveState, loadState, clearState, DEFAULTS } from './storage.js';
-import { LatencyCalibrator } from './latency-calibrator.js';
+import { LatencyCalibrator }   from './latency-calibrator.js';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const bpmSlider          = document.getElementById('bpm-slider');
@@ -24,13 +24,13 @@ const resetBtn           = document.getElementById('reset-btn');
 const latencyInfo        = document.getElementById('latency-info');
 const latencyValue       = document.getElementById('latency-value');
 
-// ── State ─────────────────────────────────────────────────────────────────────
-let activeBeat = -1;
-let calibratedLatencySec = null;
+// ── Core objects ──────────────────────────────────────────────────────────────
+let activeBeat           = -1;
+let calibratedLatencySec = null; // null = not calibrated
 
 const game = new Game({
   onScoreChange: (score, streak) => {
-    scoreEl.textContent = score;
+    scoreEl.textContent  = score;
     streakEl.textContent = streak;
     persist();
   },
@@ -49,10 +49,9 @@ const metronome = new Metronome({
   },
 });
 
+// AudioInput: latencyCompSec is set before every start() call — never mutated mid-session
 const audioInput = new AudioInput({
-  onOnset: (onsetAudioTime) => {
-    game.onOnset(onsetAudioTime);
-  },
+  onOnset: (onsetAudioTime) => game.onOnset(onsetAudioTime),
 });
 
 // ── Beat lights ───────────────────────────────────────────────────────────────
@@ -67,8 +66,7 @@ function buildLights(n) {
 }
 
 function renderLights() {
-  const lights = beatLights.querySelectorAll('.beat-light');
-  lights.forEach((l, i) => {
+  beatLights.querySelectorAll('.beat-light').forEach((l, i) => {
     l.classList.toggle('active', i === activeBeat);
     l.classList.toggle('accent', i === 0 && activeBeat === 0);
   });
@@ -77,8 +75,7 @@ function renderLights() {
 // ── Pattern selector ──────────────────────────────────────────────────────────
 function buildPatternOptions(beats) {
   patternSelect.innerHTML = '';
-  const options = PATTERNS[beats] || PATTERNS[4];
-  options.forEach((p, i) => {
+  (PATTERNS[beats] || PATTERNS[4]).forEach((p, i) => {
     const opt = document.createElement('option');
     opt.value = i;
     opt.textContent = p.label;
@@ -88,30 +85,28 @@ function buildPatternOptions(beats) {
 }
 
 function applyPattern(beats, idx) {
-  const options = PATTERNS[beats] || PATTERNS[4];
-  const chosen = options[idx] || options[0];
+  const opts   = PATTERNS[beats] || PATTERNS[4];
+  const chosen = opts[idx] || opts[0];
   game.setPattern(chosen.value);
   persist();
 }
 
-// ── Latency display ───────────────────────────────────────────────────────────
+// ── Latency ───────────────────────────────────────────────────────────────────
+function setCalibration(sec) {
+  calibratedLatencySec = sec;
+  // Write to audioInput.latencyCompSec — this is only read at start() time,
+  // so it is safe to update it here even if the session is not running.
+  audioInput.latencyCompSec = sec !== null ? sec : 0.0;
+  updateLatencyDisplay();
+}
+
 function updateLatencyDisplay() {
   if (calibratedLatencySec !== null) {
-    latencyInfo.hidden = false;
+    latencyInfo.hidden  = false;
     latencyValue.textContent = `${(calibratedLatencySec * 1000).toFixed(0)} ms`;
   } else {
     latencyInfo.hidden = true;
   }
-}
-
-function applyLatency(sec) {
-  calibratedLatencySec = sec;
-  // The calibrated delta is: onsetAudioTime - bounceAudioTime
-  // If positive (user played late), we need to shift the beat window forward,
-  // which is equivalent to subtracting this offset from the onset timestamp.
-  // We store it as latencyCompSec so AudioInput subtracts it automatically.
-  audioInput.latencyCompSec = sec !== null ? sec : 0.06;
-  updateLatencyDisplay();
 }
 
 // ── Controls ──────────────────────────────────────────────────────────────────
@@ -132,8 +127,7 @@ beatsSelect.addEventListener('change', () => {
 });
 
 patternSelect.addEventListener('change', () => {
-  const beats = parseInt(beatsSelect.value);
-  applyPattern(beats, parseInt(patternSelect.value));
+  applyPattern(parseInt(beatsSelect.value), parseInt(patternSelect.value));
 });
 
 sensitivitySlider.addEventListener('input', () => {
@@ -143,75 +137,77 @@ sensitivitySlider.addEventListener('input', () => {
   persist();
 });
 
+// ── Start / Stop ──────────────────────────────────────────────────────────────
 startBtn.addEventListener('click', async () => {
   if (metronome.isRunning) {
-    metronome.stop();
-    audioInput.stop();
-    startBtn.textContent = '▶ Iniciar';
-    startBtn.classList.remove('active');
-    activeBeat = -1;
-    renderLights();
-    game.reset();
+    _stopSession();
   } else {
-    try {
-      await audioInput.start(metronome.getAudioContext());
-      metronome.start();
-      startBtn.textContent = '■ Detener';
-      startBtn.classList.add('active');
-    } catch (err) {
-      alert('No se pudo acceder al micrófono: ' + err.message);
-    }
+    await _startSession();
   }
 });
 
+async function _startSession() {
+  try {
+    // latencyCompSec is frozen inside start() — must be set before calling it
+    audioInput.latencyCompSec = calibratedLatencySec !== null ? calibratedLatencySec : 0.0;
+    await audioInput.start(metronome.getAudioContext());
+    metronome.start();
+    startBtn.textContent = '■ Detener';
+    startBtn.classList.add('active');
+  } catch (err) {
+    alert('No se pudo acceder al micrófono: ' + err.message);
+  }
+}
+
+function _stopSession() {
+  metronome.stop();
+  audioInput.stop();
+  startBtn.textContent = '▶ Iniciar';
+  startBtn.classList.remove('active');
+  activeBeat = -1;
+  renderLights();
+  game.reset();
+}
+
 // ── Latency calibration ───────────────────────────────────────────────────────
 latencyBtn.addEventListener('click', async () => {
-  // Need mic + AudioContext running for calibration
-  let needsStop = false;
-  if (!metronome.isRunning) {
-    try {
-      await audioInput.start(metronome.getAudioContext());
-      needsStop = true;
-    } catch (err) {
-      alert('Se necesita acceso al micrófono para calibrar: ' + err.message);
-      return;
-    }
+  const wasRunning = metronome.isRunning;
+
+  // Stop game session if active
+  if (wasRunning) _stopSession();
+
+  // Start mic only (no metronome) for calibration
+  try {
+    audioInput.latencyCompSec = 0.0; // no compensation during calibration measurement
+    await audioInput.start(metronome.getAudioContext());
+  } catch (err) {
+    alert('Se necesita acceso al micrófono para calibrar: ' + err.message);
+    return;
   }
 
-  const cal = new LatencyCalibrator({
+  new LatencyCalibrator({
     audioContext: metronome.getAudioContext(),
     audioInput,
-    onDone: (avgLatencySec) => {
-      applyLatency(avgLatencySec);
+    onDone: (avgSec) => {
+      audioInput.stop();
+      setCalibration(avgSec);
       persist();
-      if (needsStop) audioInput.stop();
     },
     onCancel: () => {
-      if (needsStop) audioInput.stop();
+      audioInput.stop();
     },
-  });
-  cal.open();
+  }).open();
 });
 
 // ── Reset to defaults ─────────────────────────────────────────────────────────
 resetBtn.addEventListener('click', () => {
   if (!confirm('¿Restablecer toda la configuración a los valores por defecto?')) return;
-
-  // Stop if running
-  if (metronome.isRunning) {
-    metronome.stop();
-    audioInput.stop();
-    startBtn.textContent = '▶ Iniciar';
-    startBtn.classList.remove('active');
-    activeBeat = -1;
-    renderLights();
-  }
+  if (metronome.isRunning) _stopSession();
 
   clearState();
-  calibratedLatencySec = null;
-  applyLatency(null);
+  setCalibration(null);
 
-  bpmSlider.value = DEFAULTS.bpm;
+  bpmSlider.value        = DEFAULTS.bpm;
   bpmDisplay.textContent = DEFAULTS.bpm;
   metronome.setBpm(DEFAULTS.bpm);
 
@@ -220,9 +216,9 @@ resetBtn.addEventListener('click', () => {
   buildLights(DEFAULTS.beats);
   buildPatternOptions(DEFAULTS.beats);
 
-  sensitivitySlider.value = DEFAULTS.sensitivity;
+  sensitivitySlider.value        = DEFAULTS.sensitivity;
   sensitivityDisplay.textContent = DEFAULTS.sensitivity.toFixed(1);
-  audioInput.threshold = DEFAULTS.sensitivity;
+  audioInput.threshold           = DEFAULTS.sensitivity;
 
   game.reset();
   persist();
@@ -231,10 +227,10 @@ resetBtn.addEventListener('click', () => {
 // ── Persistence ───────────────────────────────────────────────────────────────
 function persist() {
   saveState({
-    bpm: parseInt(bpmSlider.value),
-    beats: parseInt(beatsSelect.value),
-    patternIdx: parseInt(patternSelect.value),
-    sensitivity: parseFloat(sensitivitySlider.value),
+    bpm:                  parseInt(bpmSlider.value),
+    beats:                parseInt(beatsSelect.value),
+    patternIdx:           parseInt(patternSelect.value),
+    sensitivity:          parseFloat(sensitivitySlider.value),
     calibratedLatencySec,
     ...game.getState(),
   });
@@ -245,7 +241,7 @@ function restoreState() {
   if (!s) return;
 
   const bpm = s.bpm ?? DEFAULTS.bpm;
-  bpmSlider.value = bpm;
+  bpmSlider.value        = bpm;
   bpmDisplay.textContent = bpm;
   metronome.setBpm(bpm);
 
@@ -260,16 +256,16 @@ function restoreState() {
   applyPattern(beats, pidx);
 
   const sens = s.sensitivity ?? DEFAULTS.sensitivity;
-  sensitivitySlider.value = sens;
+  sensitivitySlider.value        = sens;
   sensitivityDisplay.textContent = parseFloat(sens).toFixed(1);
-  audioInput.threshold = sens;
+  audioInput.threshold           = sens;
 
-  if (s.calibratedLatencySec !== undefined && s.calibratedLatencySec !== null) {
-    applyLatency(s.calibratedLatencySec);
+  if (s.calibratedLatencySec != null) {
+    setCalibration(s.calibratedLatencySec);
   }
 
   game.loadState(s);
-  scoreEl.textContent = s.score ?? 0;
+  scoreEl.textContent  = s.score  ?? 0;
   streakEl.textContent = s.streak ?? 0;
 }
 
@@ -279,6 +275,6 @@ buildPatternOptions(4);
 restoreState();
 
 // ── Help modal ────────────────────────────────────────────────────────────────
-helpBtn.addEventListener('click', () => { helpModal.hidden = false; });
+helpBtn.addEventListener('click',  () => { helpModal.hidden = false; });
 helpClose.addEventListener('click', () => { helpModal.hidden = true; });
 helpModal.addEventListener('click', (e) => { if (e.target === helpModal) helpModal.hidden = true; });
